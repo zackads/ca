@@ -1,2 +1,21 @@
+# IDE
 .idea/
 
+# Build output
+build/
+cmake-build-*/
+
+# Compiled binaries and objects
+/main
+/code
+/fib
+*.o
+*.a
+*.dSYM/
+
+# Tooling caches
+compile_commands.json
+.cache/
+
+# macOS
+.DS_Store

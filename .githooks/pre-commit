@@ -1,0 +1,25 @@
+#!/bin/sh
+# Reject commits whose staged C sources aren't clang-format clean.
+# Checks the staged content (not the working tree) and never modifies files.
+
+if ! command -v clang-format >/dev/null 2>&1; then
+  echo "pre-commit: clang-format not found; skipping format check" >&2
+  exit 0
+fi
+
+files=$(git diff --cached --name-only --diff-filter=ACM -- '*.c' '*.h')
+[ -z "$files" ] && exit 0
+
+bad=""
+for f in $files; do
+  if ! git show ":$f" | clang-format --assume-filename="$f" --dry-run --Werror >/dev/null 2>&1; then
+    bad="$bad $f"
+  fi
+done
+
+if [ -n "$bad" ]; then
+  echo "pre-commit: these files are not clang-format clean:" >&2
+  for f in $bad; do echo "  $f" >&2; done
+  echo "Fix with: clang-format -i$bad && git add$bad" >&2
+  exit 1
+fi

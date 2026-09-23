@@ -1,0 +1,7 @@
+BasedOnStyle: LLVM
+ColumnLimit: 100
+PointerAlignment: Right
+AlignTrailingComments: true
+AllowShortFunctionsOnASingleLine: Empty
+SortIncludes: true
+InsertNewlineAtEOF: true
