@@ -21,7 +21,9 @@ Debug builds use AddressSanitizer, and Apple clang 17's ASan runtime hangs at st
 Run from the project root (the root `Makefile` forwards to `build/`, configuring it if needed):
 
 ```sh
-make                # build
+make                # build every iteration
+make v1             # build one iteration (v1_naive); likewise v2 (v2_binary_tree)
+make run-v1 ARGS="90 20"   # build and run v1 with the given arguments; likewise run-v2
 make format         # format all sources in place
 make format-check   # fail if anything is unformatted
 make lint           # run clang-tidy
@@ -33,8 +35,8 @@ From another directory, use `make -C <project root> <target>`. Wrap hand-aligned
 ## Format
 
 ```sh
-clang-format -i *.c *.h                          # format in place
-clang-format --dry-run --Werror *.c *.h          # check only
+clang-format -i v*/*.c v*/*.h                    # format in place
+clang-format --dry-run --Werror v*/*.c v*/*.h    # check only
 ```
 
 ## Lint
@@ -42,5 +44,5 @@ clang-format --dry-run --Werror *.c *.h          # check only
 ```sh
 cmake -S . -B build -DENABLE_CLANG_TIDY=ON && cmake --build build   # lint during build
 /opt/homebrew/opt/llvm/bin/clang-tidy -p build \
-  --extra-arg=-isysroot"$(xcrun --show-sdk-path)" *.c              # lint directly
+  --extra-arg=-isysroot"$(xcrun --show-sdk-path)" v*/*.c           # lint directly
 ```

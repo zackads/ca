@@ -16,8 +16,8 @@ if (ENABLE_CLANG_TIDY)
 endif ()
 
 # Convenience targets: `make format`, `make format-check`, `make lint`.
-file(GLOB C_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/*.c)
-file(GLOB H_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/*.h)
+file(GLOB_RECURSE C_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/v*/*.c)
+file(GLOB_RECURSE H_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/v*/*.h)
 
 if (CLANG_FORMAT)
     add_custom_target(format
@@ -44,8 +44,6 @@ if (CLANG_TIDY)
             COMMENT "Running clang-tidy")
 endif ()
 
-include_directories(.)
-
 # Strict warnings everywhere; AddressSanitizer + UBSan in Debug builds.
 function(configure_target t)
     target_compile_options(${t} PRIVATE
@@ -56,8 +54,6 @@ function(configure_target t)
             $<$<CONFIG:Debug>:-fsanitize=address,undefined>)
 endfunction()
 
-add_executable(code
-        ca.c
-        ca.h
-        main.c)
-configure_target(code)
+# One executable per iteration, each built from its own directory.
+add_subdirectory(v1_naive)
+add_subdirectory(v2_binary_tree)
