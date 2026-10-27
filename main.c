@@ -1,135 +1,99 @@
+#include <errno.h>
 #include <stdbool.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/ioctl.h>
-#include <unistd.h>
+#include <string.h>
 
-#include "ht.h"
+#include "ca.h"
 
-const uint8_t DEFAULT_WIDTH = 80;
-const uint8_t SEED_SIZE = 4;
-const uint8_t T_MAX = 255;
-
-int term_width(void) {
-  struct winsize ws;
-  if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0)
-    return ws.ws_col;
-
-  const char *cols = getenv("COLUMNS");
-  if (cols && atoi(cols) > 0)
-    return atoi(cols);
-
-  return DEFAULT_WIDTH;
+static void usage(const char *prog) {
+  fprintf(stderr, "usage: %s <rule> <steps> [seed [placement]]\n", prog);
+  fprintf(stderr, "  rule       even Wolfram rule number, 0-254\n");
+  fprintf(stderr, "  steps      number of generations to run\n");
+  fprintf(stderr, "  seed       initial cells, e.g. 1101 (default 1)\n");
+  fprintf(stderr,
+          "  placement  position of the seed's leftmost 1 relative to the origin (default 0)\n");
 }
 
-void vis() {
-  printf("width = %d\n", term_width());
-  const uint8_t WIDTH = term_width();
+// Parse an integer in [min, max] into *n. Return false if s is not one.
+static bool parse_long(const char *s, long min, long max, long *n) {
+  char *end;
+  errno = 0;
+  *n = strtol(s, &end, 10);
+  return errno == 0 && *s != '\0' && *end == '\0' && *n >= min && *n <= max;
+}
 
-  bool seed[SEED_SIZE] = {1, 1, 0, 1};
-  bool old[WIDTH];
-  bool new[WIDTH];
-
-  // Initialise to zero
-  for (uint8_t i = 0; i < WIDTH; i++) {
-    old[i] = 0;
-  }
-
-  // Place the seed at the origin
-  uint8_t origin_i = (int)((WIDTH - SEED_SIZE) / 2);
-  for (int i = 0; i < SEED_SIZE; i++) {
-    old[origin_i + i] = seed[i];
-  }
-
-  // Print the initial configuration
-  for (uint8_t i = 0; i < WIDTH; i++) {
-    if (old[i]) {
-      printf("█");
-    } else {
-      printf("·");
-    }
+// Print cells lo..hi of a one-dimensional configuration.
+static void print_row(const configuration c, const int lo, const int hi) {
+  for (int x = lo; x <= hi; x++) {
+    printf("%s", (int)config_read(c, x) ? "█" : "·");
   }
   printf("\n");
-
-  while (true) {
-    // When the user hits enter, continue
-    getchar();
-
-    // Apply the update rule
-    for (uint8_t i = 0; i < WIDTH; i++) {
-      if (i == 0) {
-        new[i] = 0 ^ old[1];
-      } else if (i == WIDTH - 1) {
-        new[i] = old[WIDTH - 1] ^ 0;
-      } else {
-        new[i] = old[i - 1] ^ old[i + 1];
-      }
-    }
-
-    // Print the new configuration
-    for (uint8_t i = 0; i < WIDTH - 1; i++) {
-      if (new[i]) {
-        printf("█");
-      } else {
-        printf("·");
-      }
-    }
-    // printf("\n");
-
-    // new -> old
-    for (uint8_t i = 0; i < WIDTH; i++) {
-      old[i] = new[i];
-    }
-  }
 }
 
-void exit_nomem(void) {
-  fprintf(stderr, "out of memory\n");
-  exit(1);
-}
-
-int main(void) {
-  printf("Let's play around with our new hash table!\n");
-  // Let's play around with our new hash table.
-  ht *table = ht_create();
-  if (table == NULL) {
-    exit_nomem();
+int main(const int argc, char **argv) {
+  if (argc < 3 || argc > 5) {
+    usage(argv[0]);
+    return 1;
   }
 
-  // Read next word from stdin (up to max 100)
-  char word[101];
-  while (scanf("%100s", word) != EOF) {
-    // Look up word.
-    void *value = ht_get(table, word);
-    if (value != NULL) {
-      // Already exists, increment int that value points to
-      int *pcount = (int *)value;
-      (*pcount)++;
-      continue;
-    }
+  long rule_arg, steps, placement = 0;
+  const char *seed = argc >= 4 ? argv[3] : "1";
+  if (!parse_long(argv[1], 0, 255, &rule_arg) || !parse_long(argv[2], 0, 100000, &steps) ||
+      (argc == 5 && !parse_long(argv[4], -100000, 100000, &placement))) {
+    usage(argv[0]);
+    return 1;
+  }
 
-    // Word not found, allocate space for new int and set to 1.
-    int *pcount = malloc(sizeof(int));
-    if (pcount == NULL) {
-      exit_nomem();
-    }
-    *pcount = 1;
-    if (ht_set(table, word, pcount) == NULL) {
-      exit_nomem();
+  const rule r = (uint8_t)rule_arg;
+  if (r % 2 != 0) {
+    fprintf(stderr, "rule %d maps 000 to 1, so 0 is not quiescent; only even rules are supported\n",
+            r);
+    return 1;
+  }
+
+  if (strspn(seed, "01") != strlen(seed)) {
+    fprintf(stderr, "seed must contain only 0 and 1\n");
+    return 1;
+  }
+
+  // Put the leftmost live cell of the seed at the placement
+  const int offset = (int)strspn(seed, "0") - (int)placement;
+  const int left = (int)placement; // The leftmost live cell
+  int right = left;                // The rightmost live cell
+  const char *last = strrchr(seed, '1');
+  if (last != NULL) {
+    right = (int)(last - seed) - offset;
+  }
+
+  // The pattern spreads by at most one cell each way per step. Pad both sides equally so the
+  // origin is central.
+  int hi = (right > 0 ? right : 0) + (int)steps;
+  int lo = (left < 0 ? left : 0) - (int)steps;
+  if (-lo > hi) {
+    hi = -lo;
+  }
+  lo = -hi;
+
+  // Every live cell stays within [lo, hi], so a margin beyond it keeps the finite edges from
+  // affecting the result.
+  configuration c = config_create((size_t)hi + 2);
+  for (int i = 0; seed[i] != '\0'; i++) {
+    if (seed[i] == '1') {
+      config_set(c, i - offset, true);
     }
   }
 
-  // Print out words and frequencies, freeing values as we go.
-  hti it = ht_iterator(table);
-  while (ht_next(&it)) {
-    printf("%s %d\n", it.key, *(int *)it.value);
-    free(it.value);
+  printf("%*s↓\n", -lo, ""); // Mark the origin
+  print_row(c, lo, hi);
+  for (long t = 0; t < steps; t++) {
+    const configuration next = F(r, c);
+
+    config_destroy(c);
+    c = next;
+    print_row(c, lo, hi);
   }
 
-  // Show the number of unique words
-  printf("%d\n", (int)ht_length(table));
-
-  ht_destroy(table);
+  config_destroy(c);
   return 0;
 }

@@ -10,9 +10,11 @@ git config core.hooksPath .githooks
 ## Build
 
 ```sh
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=/opt/homebrew/opt/llvm/bin/clang
 cmake --build build
 ```
+
+Debug builds use AddressSanitizer, and Apple clang 17's ASan runtime hangs at startup on macOS 26, before `main` runs. Build with Homebrew's clang instead, as above; `make` does this automatically when it's installed. CMake caches the compiler, so to switch an existing build directory, `make clean` first.
 
 ## Shortcuts
 

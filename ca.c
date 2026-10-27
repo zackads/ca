@@ -1,30 +1,70 @@
-#include <stddef.h>
-#include <stdint.h>
+#include "ca.h"
 
-typedef uint8_t state_t;
+#include <stdio.h>
+#include <stdlib.h>
 
-typedef state_t (*local_update_rule)(const state_t *neighbourhood, size_t n, void *ctx);
+configuration config_create(size_t capacity) {
+  bool *left = calloc(capacity, sizeof(bool));
+  bool *right = calloc(capacity, sizeof(bool));
 
-typedef struct {
-  const int *const * neighbours;
-  size_t len;
-} neighbourhood;
+  if (left == NULL || right == NULL) {
+    fprintf(stderr, "out of memory\n");
+    exit(1);
+  }
 
-typedef struct {
-  size_t            d; // The dimension of the cellular space
-  size_t            s; // S = { 0, 1, ..., s - 1 }
-  neighbourhood     N;
-  local_update_rule f;
-} ca;
+  const configuration config = {capacity, left, right};
 
-typedef struct {
-  const size_t      *shape; // Extent in each dimension
-  size_t            len;
-  state_t           *cells;
-} configuration;
+  return config;
+}
 
-void step(const ca *r, const configuration *in, configuration *out) {
-  // 1.
+state config_read(const configuration c, const cell x) {
+  if (x < -(long)c.capacity || (long)c.capacity <= x) {
+    return false;
+  }
+  if (x >= 0) {
+    return c.right[x];
+  }
+  return c.left[(size_t)((cell)c.capacity + x)];
+}
 
-  // 2.
+void config_set(const configuration c, const cell x, const state s) {
+  if (x < -(long)c.capacity || (long)c.capacity <= x) {
+    fprintf(stderr, "%s:%d: index %ld out of bounds for capacity %zu\n", __FILE__, __LINE__, x,
+            c.capacity);
+    abort();
+  }
+  if (x >= 0) {
+    c.right[x] = s;
+  } else {
+    c.left[(size_t)((cell)c.capacity + x)] = s;
+  }
+}
+
+void config_destroy(const configuration c) {
+  free(c.left);
+  free(c.right);
+}
+
+state f(const rule r, const configuration config, const cell x) {
+  const state left = config_read(config, x - 1);
+  const state centre = config_read(config, x);
+  const state right = config_read(config, x + 1);
+
+  return ((r >> ((4 * (long)left) + (2 * (long)centre) + (long)right)) & 1) != 0;
+}
+
+configuration F(const rule r, const configuration config) {
+  const configuration next = config_create(config.capacity);
+
+  // Negative cells
+  for (long x = -(long)config.capacity; x < 0; x++) {
+    config_set(next, x, f(r, config, x));
+  }
+
+  // Positive cells
+  for (long x = 0; x < (long)config.capacity; x++) {
+    config_set(next, x, f(r, config, x));
+  }
+
+  return next;
 }

@@ -58,12 +58,6 @@ endfunction()
 
 add_executable(code
         ca.c
-        ht.c
-        ht.h
+        ca.h
         main.c)
 configure_target(code)
-
-add_executable(fib
-        fib.c
-)
-configure_target(fib)
